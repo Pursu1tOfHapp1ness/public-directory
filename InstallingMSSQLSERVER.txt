@@ -1,0 +1,58 @@
+#Input login/password
+$Credentials = Get-Credential
+$IP_ADDR = "10.0.0.2"
+
+
+#Getting  current address
+Invoke-Sqlcmd -ServerInstance $IP_ADDR -Credential $Credentials -Query "
+SELECT name, physical_name as CurrentLocation, state_desc
+FROM sys.master_files
+WHERE database_id=DB_ID(N'tempdb')
+"
+
+#Creating new directories for moving system database files 'n getting free space 
+Invoke-Command -ComputerName $IP_ADDR -ScriptBlock {
+
+if(-not ((Test-Path "E:\SQLLog") -and (Test-Path "E:\SQLData") ) ){
+    New-Item -Name "SQLLog" -Path "E:\" -ItemType "directory"
+    New-Item -Name "SQLData" -Path "E:\" -ItemType "directory"
+}
+else {
+    Write-Host -ForegroundColor Red "Such directories names are used!"
+    break
+}
+Get-WmiObject Win32_LogicalDisk | Where { $_.DeviceID -match "E" } |Select-Object -Property {$_.FreeSpace/1Gb}
+
+}
+
+
+#Moving files from default to new directory
+Invoke-Sqlcmd -ServerInstance $IP_ADDR -Credential $Credentials -Query "
+USE master
+GO
+
+ALTER DATABASE tempdb
+MODIFY FILE (NAME = tempdev, FILENAME = 'E:\SQLData\tempdb.mdf', MAXSIZE = 'Unlimited', FILEGROWTH = 5Mb)
+GO
+
+ALTER DATABASE tempdb
+MODIFY FILE (NAME = templog, FILENAME = 'E:\SQLLog\templog.ldf', MAXSIZE = 'Unlimited', FILEGROWTH = 1Mb)
+GO
+"
+
+#Restarting MS SQL SERVER
+Invoke-Command -ComputerName $IP_ADDR -ScriptBlock {net stop MSSQLSERVER}
+Invoke-Command -ComputerName $IP_ADDR -ScriptBlock {net start MSSQLSERVER}
+
+#Getting  current address
+Invoke-Sqlcmd -ServerInstance $IP_ADDR -Credential $Credentials -Query "
+SELECT name, physical_name as CurrentLocation, state_desc
+FROM sys.master_files
+WHERE database_id=DB_ID(N'tempdb')
+"
+
+#Deleting old database files
+Invoke-Command -ComputerName $IP_ADDR -ScriptBlock {
+Remove-Item -Path "C:\Program Files\Microsoft SQL Server\MSSQL11.MSSQLSERVER\MSSQL\DATA\tempdb.mdf"
+Remove-Item -Path "C:\Program Files\Microsoft SQL Server\MSSQL11.MSSQLSERVER\MSSQL\DATA\templog.ldf"
+}
