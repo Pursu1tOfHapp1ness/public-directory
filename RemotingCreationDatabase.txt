@@ -1,0 +1,103 @@
+﻿#Create new directories for databases
+function CreateNewDirectories{
+New-Item -Name "Data" -Path "E:\" -ItemType "directory"
+New-Item -Name "Logs" -Path "E:\" -ItemType "directory"
+New-Item -Name "AdditionalData" -Path "E:\" -ItemType "directory"
+}
+
+#Deleting directories
+function DeleteDirectories{
+Remove-Item -Path "E:\Logs"
+Remove-Item -Path "E:\Data"
+Remove-Item -Path "E:\AdditionalData"
+}
+
+
+#Creating HumanResources Database 'n InternetSales Database
+function CreateDatabases {
+CreateNewDirectories
+Invoke-Sqlcmd -Password "PaSSw0rd" -Username "sa"  -Query "
+USE master;
+GO
+
+CREATE DATABASE HumanResources
+ON PRIMARY
+(Name = 'HumanResources',
+    SIZE = 50Mb,
+    FILENAME = 'E:\Data\HumanResources.mdf',
+    FILEGROWTH = 5Mb,
+    MAXSIZE = 'Unlimited')
+
+LOG ON
+(Name='HumanResources_log',
+
+    SIZE=5Mb,
+    FILENAME='E:\Logs\HumanResources.ldf',
+    FILEGROWTH=1Mb,
+    MAXSIZE='Unlimited')
+GO
+
+
+CREATE DATABASE InternetSales
+ON PRIMARY
+(NAME = 'InternetSales',
+	FILENAME = 'E:\Data\InternetSales.mdf',
+    MAXSIZE='Unlimited',
+    SIZE=5Mb,
+    FILEGROWTH=1Mb),
+FILEGROUP SalesData
+(NAME = 'InternetSales_data1',
+	FILENAME = 'E:\AdditionalData\InternetSales_data1.ndf',
+	MAXSIZE = 'Unlimited',
+	SIZE = 100Mb,
+	FILEGROWTH = 10Mb),
+(NAME = 'InternetSales_data2',
+	FILENAME = 'E:\AdditionalData\InternetSales_data2.ndf',
+	MAXSIZE = 'Unlimited',
+	SIZE = 100Mb,
+	FILEGROWTH = 10Mb)
+LOG ON
+(NAME = 'InternetSales_log',
+	FILENAME = 'E:\Logs\InternetSales.ldf' ,
+	MAXSIZE = 'Unlimited',
+	SIZE = 2Mb,
+	FILEGROWTH = 10%)
+GO
+
+
+"
+}
+
+#Delecting Databases
+function DropDatabases{
+    Invoke-Sqlcmd -Password "PaSSw0rd" -Username "sa"  -Query "
+        USE master
+        GO
+
+        DROP DATABASE InternetSales
+        GO
+
+        DROP DATABASE HumanResources
+        GO
+ "
+}
+
+#Checking for creating databases
+if((Test-Path  -Path "E:\Data") -and (Test-Path -Path "E:\Logs") -and (Test-Path -Path "E:\AdditionalData") ){
+    Write-Host -ForegroundColor Red "Such directories names are used! These directories will be deleted with all included files!"
+    if( (Test-Path -Path "E:\Logs\" -Filter "*.*") -or (Test-Path -Path "E:\AdditionalData\" -Filter "*.*") -or (Test-Path -Path "E:\Data\" -Filter "*.*") ){
+        DropDatabases
+        DeleteDirectories
+        CreateDatabases
+        break
+    }
+    else {
+        DeleteDirectories
+        CreateDatabases
+        break
+    }
+}
+else{
+CreateDatabases
+}
+
