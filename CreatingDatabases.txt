@@ -1,0 +1,70 @@
+﻿#Input login/password
+$Credentials = Get-Credential
+$IP_ADDR = "10.0.0.3"
+
+#Creating new directories for system database files 
+Invoke-Command -ComputerName $IP_ADDR -ScriptBlock {
+
+if(-not ((Test-Path "E:\Data") -and (Test-Path "E:\Logs") -and (Test-Path "E:\AdditionalData")) ){
+    New-Item -Name "Data" -Path "E:\" -ItemType "directory"
+    New-Item -Name "Logs" -Path "E:\" -ItemType "directory"
+    New-Item -Name "AdditionalData" -Path "E:\" -ItemType "directory"
+}
+else {
+    Write-Host -ForegroundColor Red "Such directories names are used!"
+    break
+}
+}
+
+#Creating HumanResources Database 'n InternetSales Database
+Invoke-Sqlcmd -ServerInstance $IP_ADDR -Credential $Credentials -Query "
+USE master;
+GO
+
+CREATE DATABASE HumanResources
+ON PRIMARY
+(Name = 'HumanResources',
+    SIZE = 50Mb,
+    FILENAME = 'E:\Data\HumanResources.mdf',
+    FILEGROWTH = 5Mb,
+    MAXSIZE = 'Unlimited')
+
+LOG ON
+(Name='HumanResources_log',
+    SIZE=5Mb,
+    FILENAME='E:\Logs\HumanResources.ldf',
+    FILEGROWTH=1Mb,
+    MAXSIZE='Unlimited')
+GO
+
+
+CREATE DATABASE InternetSales
+ON PRIMARY
+(NAME = 'InternetSales',
+	FILENAME = 'E:\Data\InternetSales.mdf',
+    MAXSIZE='Unlimited',
+    SIZE=5Mb,
+    FILEGROWTH=1Mb),
+FILEGROUP SalesData
+(NAME = 'InternetSales_data1',
+	FILENAME = 'E:\AdditionalData\InternetSales_data1.ndf',
+	MAXSIZE = 'Unlimited',
+	SIZE = 100Mb,
+	FILEGROWTH = 10Mb),
+(NAME = 'InternetSales_data2',
+	FILENAME = 'E:\AdditionalData\InternetSales_data2.ndf',
+	MAXSIZE = 'Unlimited',
+	SIZE = 100Mb,
+	FILEGROWTH = 10Mb)
+LOG ON
+(NAME = 'InternetSales_log',
+	FILENAME = 'E:\Logs\InternetSales.ldf' ,
+	MAXSIZE = 'Unlimited',
+	SIZE = 2Mb,
+	FILEGROWTH = 10%)
+GO
+
+
+
+
+"
