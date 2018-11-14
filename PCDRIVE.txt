@@ -1,0 +1,186 @@
+﻿Param(
+[parameter(Mandatory=$true,HelpMessage="Enter Password from MSSQL Server:")]
+$Password,
+[parameter(Mandatory=$true,HelpMessage="Enter UserName from MSSQL Server:")]
+$Login
+)
+
+
+
+
+#Create new directories for database
+function CreateNewDirectories{
+New-Item -Name "DataPCDRIVE" -Path "E:\" -ItemType "directory"
+New-Item -Name "LogsPCDRIVE" -Path "E:\" -ItemType "directory"
+
+}
+
+#Deleting directories
+function DeleteDirectories{
+Remove-Item -Path "E:\DataPCDRIVE"
+Remove-Item -Path "E:\LogsPCDRIVE"
+
+}
+
+
+#Creating PCDRIVE Database
+function CreateDatabase {
+CreateNewDirectories
+Invoke-Sqlcmd -Password $Password -Username $Login  -Query "
+USE master;
+GO
+
+CREATE DATABASE PCDRIVE
+ON PRIMARY
+(Name = 'PCDRIVE',
+    SIZE = 50Mb,
+    FILENAME = 'E:\DataPCDRIVE\PCDRIVE.mdf',
+    FILEGROWTH = 5Mb,
+    MAXSIZE = 'Unlimited')
+
+LOG ON
+(Name='PCDRIVE_log',
+
+    SIZE=5Mb,
+    FILENAME='E:\LogsPCDRIVE\PCDRIVE.ldf',
+    FILEGROWTH=1Mb,
+    MAXSIZE='Unlimited')
+GO
+"
+}
+
+#Checking usage of DB's space
+function UsageOfFreeDBSpace{
+Invoke-Sqlcmd -Password $Password -Username $Login -Query "
+USE PCDRIVE  
+GO  
+SELECT SUM(user_object_reserved_page_count) AS [user object pages used],  
+(SUM(user_object_reserved_page_count)*1.0/128) AS [user object space in MB]  
+FROM sys.dm_db_file_space_usage
+"
+}
+#Delecting Databases
+function DropDatabase{
+    Invoke-Sqlcmd -Password $Password -Username $Login  -Query "
+        USE master
+        GO
+
+        DROP DATABASE PCDRIVE
+        GO
+ "
+}
+
+#Creating 3 tables
+function CreateTables{
+Invoke-SqlCmd -Password $Password -Username $Login -Query "
+CREATE TABLE PCDRIVE.dbo.HDD_Disks
+(
+	ID int PRIMARY KEY NOT NULL,	
+	DiskName varchar(60) NULL,
+	BusType varchar(10) NULL,
+	HealthStatus varchar(10) NULL,
+	DiskSize varchar(10) NULL,
+	DiskType varchar(10) NULL	 
+)
+
+INSERT INTO PCDRIVE.dbo.HDD_Disks VALUES (1,'TOSHIBA MQ01ABD100','SATA','Healthy','1 TB','HDD')
+INSERT INTO PCDRIVE.dbo.HDD_Disks VALUES (2,'Seagate ST100DMO10','SATA','Stopped','2 TB','HDD')
+INSERT INTO PCDRIVE.dbo.HDD_Disks VALUES (3,'Western Digital WD5000LPLX','SATA','Healthy','500 GB','HDD')
+
+
+CREATE TABLE PCDRIVE.dbo.SSD_Disks
+(
+	ID int PRIMARY KEY NOT NULL,	
+	DiskName varchar(60) NULL,
+	BusType varchar(10) NULL,
+	HealthStatus varchar(10) NULL,
+	DiskSize varchar(10) NULL,
+	DiskType varchar(10) NULL	 
+)
+
+INSERT INTO PCDRIVE.dbo.SSD_Disks VALUES (1,'SAMSUNG MZ-V6E250BW','SATA','Healthy','250 GB','SSD')
+INSERT INTO PCDRIVE.dbo.SSD_Disks VALUES (2,'SAMSUNG MZ-75E250BW','SATA','Healthy','250 GB','SSD')
+INSERT INTO PCDRIVE.dbo.SSD_Disks VALUES (3,'Western Digital WDS100T1B0A','SATA','Stopped','1 TB','SSD')
+
+CREATE TABLE PCDRIVE.dbo.Hybrid_Disks
+(
+	ID int PRIMARY KEY NOT NULL,	
+	DiskName varchar(60) NULL,
+	BusType varchar(10) NULL,
+	HealthStatus varchar(10) NULL,
+	DiskSize varchar(10) NULL,
+	DiskType varchar(10) NULL	 
+)
+
+INSERT INTO PCDRIVE.dbo.Hybrid_Disks VALUES (1,'Seagate ST1000LX015','SATA','Healthy','1 TB','Hybrid')
+INSERT INTO PCDRIVE.dbo.Hybrid_Disks VALUES (2,'HGST HTS7210A9E630','SATA','Stopped','1 TB','Hybrid')
+
+"
+}
+
+#Seeing information about tables
+function SeeSSD_Disks{
+Invoke-SqlCmd -Password $Password -Username $Login -Query "
+SELECT * FROM PCDRIVE.dbo.SSD_Disks
+" | Format-Table -Property ID,DiskName,HealthStatus,DiskSize,DiskType
+}
+
+function SeeHDD_Disks{
+Invoke-SqlCmd -Password $Password -Username $Login -Query "
+SELECT * FROM PCDRIVE.dbo.HDD_Disks
+" | Format-Table -Property ID,DiskName,HealthStatus,DiskSize,DiskType
+}
+
+function SeeHybrid_Disks{
+Invoke-SqlCmd -Password $Password -Username $Login -Query "
+SELECT * FROM PCDRIVE.dbo.Hybrid_Disks
+" | Format-Table -Property ID,DiskName,HealthStatus,DiskSize,DiskType
+}
+
+function SeeInformationAboutTables{
+SeeSSD_Disks
+SeeHDD_Disks
+SeeHybrid_Disks
+}
+
+function RestartMSSQL{
+Invoke-Command -ScriptBlock {
+ net stop MSSQLSERVER
+ net start MSSQLSERVER
+ }
+}
+
+#Checking for creating databases
+if((Test-Path  -Path "E:\DataPCDRIVE") -and (Test-Path -Path "E:\LogsPCDRIVE") ){
+    Write-Host -ForegroundColor Red "Such directories names are used! These directories will be deleted with all included files!"
+    if( (Test-Path -Path "E:\LogsPCDRIVE\" -Filter "*.*")  -or (Test-Path -Path "E:\DataPCDRIVE\" -Filter "*.*") ){
+        DropDatabase 
+        DeleteDirectories
+        CreateDatabase
+        UsageOfFreeDBSpace
+        CreateTables
+        RestartMSSQL
+        UsageOfFreeDBSpace
+        SeeInformationAboutTables
+        break
+    }
+    else {
+        DeleteDirectories
+        CreateDatabase
+        UsageOfFreeDBSpace
+        CreateTables
+        RestartMSSQL
+        UsageOfFreeDBSpace
+        SeeInformationAboutTables
+        break
+    }
+}
+else{
+CreateDatabase
+UsageOfFreeDBSpace
+CreateTables
+RestartMSSQL
+UsageOfFreeDBSpace
+SeeInformationAboutTables
+} 
+
